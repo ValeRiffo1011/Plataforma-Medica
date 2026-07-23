@@ -10,10 +10,18 @@ st.set_page_config(
     layout="wide"
 )
 
-# Conectar el "Cerebro" (IA de Google) con el modelo clásico y estable (gemini-pro)
+# Conectar el "Cerebro" (Buscador Automático Infalible)
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    modelo_texto = genai.GenerativeModel('gemini-pro')
+    
+    # Truco: Buscar el primer modelo que el servidor permita usar con tu clave
+    modelo_seguro = 'gemini-1.5-flash' # Nombre por defecto por si acaso
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            modelo_seguro = m.name
+            break # Encontró uno válido y se detiene
+            
+    modelo_texto = genai.GenerativeModel(modelo_seguro)
     ia_conectada = True
 except Exception as e:
     ia_conectada = False
