@@ -10,10 +10,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# Conectar el "Cerebro" (IA de Google) sacando la clave de la caja fuerte
+# Conectar el "Cerebro" (IA de Google) con el modelo actualizado (Flash)
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    modelo_texto = genai.GenerativeModel('gemini-1.5-pro-latest')
+    modelo_texto = genai.GenerativeModel('gemini-1.5-flash')
     ia_conectada = True
 except Exception as e:
     ia_conectada = False
@@ -24,16 +24,16 @@ if not ia_conectada:
 st.markdown("---")
 
 # ==========================================
-# 2. BARRA LATERAL (HISTORIAL Y AJUSTES)
+# 2. BARRA LATERAL (HISTORIAL LIMPIO)
 # ==========================================
 with st.sidebar:
-    st.header("📁 Historial de Clases")
-    st.button("📄 Bioética - Introducción")
-    st.button("📄 Fisiología - Ciclo Cardíaco")
-    st.button("📄 Gastroenterología - Jornada I")
+    st.header("📁 Mis Apuntes")
+    st.caption("Documentos recientes (Maquetas visuales)")
+    st.button("📄 Ingreso Hospital Regional")
+    st.button("📄 Anamnesis - Paciente Cama 4")
+    st.button("📄 Apuntes Medicina Interna")
     
-    st.markdown("---")
-    st.header("⚙️ Ajustes")
+    # La sección de Ajustes fue eliminada según lo solicitado.
 
 # ==========================================
 # 3. PESTAÑAS PRINCIPALES
@@ -47,7 +47,7 @@ tab_transcripcion, tab_anki, tab_simulador, tab_tablas, tab_semiologia = st.tabs
 ])
 
 # ------------------------------------------
-# PESTAÑAS 1 a 4 (Esqueleto Visual Mantenido)
+# PESTAÑA 1: TRANSCRIPCIÓN
 # ------------------------------------------
 with tab_transcripcion:
     st.subheader("Paso 1: Sube tu material")
@@ -70,17 +70,26 @@ with tab_transcripcion:
         st.info("🖼️ Banco de Diapositivas")
         st.caption("Arrastra las imágenes al editor cuando lo necesites.")
 
+# ------------------------------------------
+# PESTAÑA 2: TALLER ANKI
+# ------------------------------------------
 with tab_anki:
     st.subheader("Control de Calidad de Tarjetas")
     st.data_editor({"Frente (Pregunta)": ["¿Año del Código de Núremberg?"], "Reverso (Respuesta)": ["1947"], "Aprobar": [True]}, num_rows="dynamic", use_container_width=True)
     st.button("🟩 DESCARGAR MAZO (.apkg)", type="primary")
 
+# ------------------------------------------
+# PESTAÑA 3: SIMULADOR
+# ------------------------------------------
 with tab_simulador:
     st.subheader("Repaso Activo de la Clase Seleccionada")
     st.info("**Pregunta 1:** ¿Cuáles son los 4 principios de la bioética de Beauchamp y Childress?")
     if st.button("Revelar Respuesta"):
         st.success("Autonomía, No Maleficencia, Beneficencia, y Justicia.")
 
+# ------------------------------------------
+# PESTAÑA 4: TABLAS CLÍNICAS
+# ------------------------------------------
 with tab_tablas:
     st.subheader("Generador de Tablas de Alto Rendimiento")
     st.file_uploader("📚 Sube bibliografía extra (.pdf, .docx)", type=["pdf", "docx"])
@@ -93,7 +102,7 @@ with tab_tablas:
     col_tab2.button("📝 Descargar Tabla en formato Word")
 
 # ------------------------------------------
-# PESTAÑA 5: ASISTENTE DE SEMIOLOGÍA (¡VIVO!)
+# PESTAÑA 5: ASISTENTE DE SEMIOLOGÍA
 # ------------------------------------------
 with tab_semiologia:
     st.subheader("Estructurador de Fichas Clínicas")
@@ -102,7 +111,6 @@ with tab_semiologia:
     datos_brutos = st.text_area("Datos en bruto del paciente:", height=150, 
                  placeholder="Ej: Paciente Juan, 65 años, le duele la guata hace 3 días, su mamá tiene diabetes, lo operaron del apéndice...")
     
-    # Lógica de la Inteligencia Artificial
     if st.button("✨ Generar Historia Clínica Estructurada", type="primary"):
         if datos_brutos and ia_conectada:
             with st.spinner('Procesando datos clínicos con IA...'):
@@ -118,7 +126,6 @@ with tab_semiologia:
         else:
             st.warning("Por favor, ingresa los datos del paciente primero.")
             
-    # Mostrar el resultado generado
     texto_mostrar = st.session_state.get('ficha_generada', "Aquí aparecerá la ficha clínica ordenada para que la copies, edites o guardes...")
     st.text_area("Historia Clínica Oficial (Editable):", height=300, value=texto_mostrar)
     
