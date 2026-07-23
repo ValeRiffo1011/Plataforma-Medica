@@ -10,10 +10,10 @@ st.set_page_config(
     layout="wide"
 )
 
-# Conectar el "Cerebro" (IA de Google) con el modelo actualizado (Flash)
+# Conectar el "Cerebro" (IA de Google) con el modelo clásico y estable (gemini-pro)
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    modelo_texto = genai.GenerativeModel('gemini-1.5-flash')
+    modelo_texto = genai.GenerativeModel('gemini-pro')
     ia_conectada = True
 except Exception as e:
     ia_conectada = False
@@ -32,8 +32,6 @@ with st.sidebar:
     st.button("📄 Ingreso Hospital Regional")
     st.button("📄 Anamnesis - Paciente Cama 4")
     st.button("📄 Apuntes Medicina Interna")
-    
-    # La sección de Ajustes fue eliminada según lo solicitado.
 
 # ==========================================
 # 3. PESTAÑAS PRINCIPALES
