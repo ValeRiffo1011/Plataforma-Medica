@@ -23,17 +23,16 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("⚙️ Ajustes")
-    # Instrucción para el Modo Oscuro real de Streamlit
-    st.info("💡 **Tip de visualización:** Para activar el Modo Oscuro, haz clic en los 3 puntitos arriba a la derecha (⋮) > **Settings** > **Theme** > **Dark**.")
 
 # ==========================================
-# 3. PESTAÑAS PRINCIPALES (4 ÁREAS)
+# 3. PESTAÑAS PRINCIPALES (AHORA 5 ÁREAS)
 # ==========================================
-tab_transcripcion, tab_anki, tab_simulador, tab_tablas = st.tabs([
+tab_transcripcion, tab_anki, tab_simulador, tab_tablas, tab_semiologia = st.tabs([
     "🎙️ Transcripción y Edición", 
     "🎴 Taller Anki", 
     "🎯 Simulador Rápido",
-    "📊 Tablas Clínicas (Med. Interna)"
+    "📊 Tablas Clínicas",
+    "📝 Asistente de Semiología"
 ])
 
 # ------------------------------------------
@@ -57,11 +56,10 @@ with tab_transcripcion:
         st.text_area("Apunte estructurado listo para editar:", height=300, 
                      value="Aquí aparecerá tu apunte con el formato médico de siempre...")
         
-        # Botones de exportación corregidos
         col_btn1, col_btn2, col_btn3 = st.columns(3)
         col_btn1.button("💾 Guardar en el Historial")
         col_btn2.button("📤 Exportar a PDF")
-        col_btn3.button("📝 Exportar a Word")
+        col_btn3.button("📝 Descargar en formato Word")
         
     with col_imagenes:
         st.info("🖼️ Banco de Diapositivas")
@@ -96,11 +94,11 @@ with tab_simulador:
         st.success("Autonomía, No Maleficencia, Beneficencia, y Justicia.")
 
 # ------------------------------------------
-# PESTAÑA 4: TABLAS CLÍNICAS (NUEVO)
+# PESTAÑA 4: TABLAS CLÍNICAS
 # ------------------------------------------
 with tab_tablas:
     st.subheader("Generador de Tablas de Alto Rendimiento")
-    st.write("Sube material adicional (apuntes, libros o guías clínicas) para que la IA lo fusione con tu clase y genere una tabla comparativa.")
+    st.write("Sube material adicional para que la IA lo fusione con tu clase y genere una tabla comparativa.")
     
     st.file_uploader("📚 Sube bibliografía extra (.pdf, .docx)", type=["pdf", "docx"])
     st.button("🚀 Generar Tabla de Enfermedades", type="primary")
@@ -108,10 +106,32 @@ with tab_tablas:
     st.markdown("---")
     st.write("**Vista Previa del Formato:**")
     
-    # Ejemplo visual de la tabla fusionada con la idea del video
     st.markdown("""
     | Enfermedad | Definición / Etiología | Fisiopatología | Cuadro Clínico | Diagnóstico | Tratamiento |
     | :--- | :--- | :--- | :--- | :--- | :--- |
     | **Colecistitis Aguda** | Inflamación de vesícula. 90% por litiasis. | Obstrucción del cístico → isquemia de pared. | Fiebre, náuseas. <br>📘 **[EXAMEN]** Signo de Murphy (+). | Ecografía. <br>🚨 **[ALERTA ROJA]** Pared >4mm. | Quirúrgico + ATB. |
-    | **Apendicitis Aguda** | Inflamación del apéndice cecal. | Obstrucción de la luz (fecalito, hiperplasia linfoide). | Dolor periumbilical migratorio. <br>📘 **[EXAMEN]** Signo de Blumberg. | Clínico / TAC. | Apendicectomía. |
     """)
+    
+    col_tab1, col_tab2 = st.columns(2)
+    col_tab1.button("📤 Exportar Tabla a PDF")
+    col_tab2.button("📝 Descargar Tabla en formato Word")
+
+# ------------------------------------------
+# PESTAÑA 5: ASISTENTE DE SEMIOLOGÍA (NUEVA)
+# ------------------------------------------
+with tab_semiologia:
+    st.subheader("Estructurador de Fichas Clínicas")
+    st.write("Ingresa los datos desordenados de tu entrevista con el paciente. La IA los organizará en una Anamnesis profesional (Próxima, Remota, Hábitos, etc.).")
+    
+    st.text_area("Datos en bruto del paciente:", height=150, 
+                 placeholder="Ej: Paciente Juan, 65 años, le duele la guata hace 3 días, su mamá tiene diabetes...")
+    
+    st.button("✨ Generar Historia Clínica Estructurada", type="primary")
+    
+    st.markdown("---")
+    st.text_area("Historia Clínica Oficial (Editable):", height=250, 
+                 value="Aquí aparecerá la ficha clínica ordenada para que la copies, edites o guardes...")
+    
+    col_sem1, col_sem2 = st.columns(2)
+    col_sem1.button("📤 Exportar Ficha a PDF")
+    col_sem2.button("📝 Descargar Ficha en formato Word")
