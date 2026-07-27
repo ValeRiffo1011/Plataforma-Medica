@@ -4,11 +4,9 @@ import google.generativeai as genai
 # ==========================================
 # 0. CONFIGURACIÓN DE LA IA Y MEMORIA
 # ==========================================
-# Cargar la llave desde los secretos de Streamlit
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
-# Crear la memoria para guardar el apunte generado
 if "apunte_generado" not in st.session_state:
     st.session_state.apunte_generado = "Aquí aparecerá el apunte médico ordenado con viñetas y negritas..."
 
@@ -50,35 +48,47 @@ with tab_apuntes:
         if texto_crudo.strip() == "":
             st.warning("⚠️ Por favor, pega el texto de la clase primero.")
         else:
-            with st.spinner("🧠 Conectando con el motor estable de IA y estructurando tu apunte..."):
-                try:
-                    # Forzamos el uso del modelo más estable y rápido disponible
-                    modelo = genai.GenerativeModel('gemini-1.5-flash')
-                    
-                    prompt = f"""
-                    Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
-                    Debes usar la siguiente estructura estrictamente:
-                    - Títulos principales para los temas.
-                    - Viñetas y sub-viñetas para organizar la información.
-                    - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
-                    - Elimina los titubeos del profesor y ve directo al grano.
-                    
-                    Texto de la clase:
-                    {texto_crudo}
-                    """
-                    respuesta = modelo.generate_content(prompt)
-                    
-                    # Guardar el resultado en la memoria y actualizar la página
+            with st.spinner("🧠 Conectando con la IA (probando motores disponibles)..."):
+                
+                # TRUCO NINJA: Lista de motores de respaldo (Plan A, Plan B, Plan C)
+                modelos_posibles = ['gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro']
+                respuesta = None
+                ultimo_error = ""
+                
+                prompt = f"""
+                Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
+                Debes usar la siguiente estructura estrictamente:
+                - Títulos principales para los temas.
+                - Viñetas y sub-viñetas para organizar la información.
+                - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
+                - Elimina los titubeos del profesor y ve directo al grano.
+                
+                Texto de la clase:
+                {texto_crudo}
+                """
+
+                # El código probará cada motor hasta que uno funcione
+                for nombre_modelo in modelos_posibles:
+                    try:
+                        modelo = genai.GenerativeModel(nombre_modelo)
+                        respuesta = modelo.generate_content(prompt)
+                        break  # ¡Funcionó! Salimos del ciclo de intentos
+                    except Exception as e:
+                        ultimo_error = str(e)
+                        continue  # Este falló, probamos el siguiente motor
+                
+                if respuesta:
+                    # Si alguno de los 3 funcionó, guardamos y actualizamos
                     st.session_state.apunte_generado = respuesta.text
                     st.rerun()
-                except Exception as e:
-                    st.error(f"Ocurrió un error con la IA: {e}")
+                else:
+                    # Si los 3 fallaron, mostramos el error
+                    st.error(f"Streamlit sigue bloqueando la conexión. Detalle técnico: {ultimo_error}")
         
     st.markdown("---")
     
     col_texto, col_imagenes = st.columns([3, 1])
     with col_texto:
-        # Aquí la caja de texto lee lo que haya en la memoria
         texto_final = st.text_area("Apunte estructurado listo para editar:", height=400, value=st.session_state.apunte_generado)
         
         col_btn1, col_btn2, col_btn3 = st.columns(3)
