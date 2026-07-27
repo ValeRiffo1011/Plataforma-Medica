@@ -66,7 +66,6 @@ with tab_anki:
     st.subheader("Generador Automático de Tarjetas")
     st.write("Genera flashcards directas cruzando tus apuntes con literatura médica.")
     
-    # Nuevas opciones de selección de material
     col_fuente1, col_fuente2 = st.columns(2)
     with col_fuente1:
         apuntes_seleccionados_anki = st.multiselect(
@@ -103,7 +102,6 @@ with tab_tablas:
     st.subheader("Generador de Tablas de Alto Rendimiento")
     st.write("Compara patologías cruzando la clase del profesor con guías clínicas o papers.")
     
-    # Nuevas opciones de selección de material
     col_fuente3, col_fuente4 = st.columns(2)
     with col_fuente3:
         apuntes_seleccionados_tablas = st.multiselect(
@@ -125,5 +123,22 @@ with tab_tablas:
         st.info("Próximamente: La IA armará la tabla clínica perfecta cruzando ambas fuentes de información.")
         
     st.markdown("---")
-    st.write("**Vista Previa:**")
-    st.markdown("| Enfermedad | Fisiopatología | Cuadro Clínico | Diagnóstico | Tratamiento |\n| :--- | :--- | :--- | :--- | :--- |\n| **Colecistitis** | Obstrucción cístico. | Fiebre, Murphy (+). | Eco: Pared >4mm. | Colecistectomía. |")
+    st.write("**Vista Previa Editable:**")
+    
+    # Aquí cambiamos la tabla estática por el editor interactivo
+    st.data_editor(
+        {
+            "Enfermedad": ["Colecistitis", "Colangitis"],
+            "Fisiopatología": ["Obstrucción del conducto cístico.", "Infección de la vía biliar."],
+            "Cuadro Clínico": ["Fiebre, dolor, Murphy (+).", "Fiebre, Ictericia, Dolor (Tríada de Charcot)."],
+            "Diagnóstico": ["Eco: Pared engrosada.", "Eco + Alteración de pruebas hepáticas."],
+            "Tratamiento": ["Colecistectomía.", "Antibióticos y Drenaje biliar."]
+        },
+        num_rows="dynamic",
+        use_container_width=True
+    )
+    
+    # Nuevos botones de descarga
+    col_btn_tabla1, col_btn_tabla2 = st.columns(2)
+    col_btn_tabla1.button("📥 Descargar Tabla en Excel (.csv)", type="primary")
+    col_btn_tabla2.button("📝 Descargar Tabla en Word")
