@@ -1,11 +1,11 @@
 import streamlit as st
-import google.generativeai as genai
+import requests
 
 # ==========================================
 # 0. CONFIGURACIÓN DE LA IA Y MEMORIA
 # ==========================================
-if "GEMINI_API_KEY" in st.secrets:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+# Verificamos si la llave existe en la caja fuerte
+tiene_llave = "GEMINI_API_KEY" in st.secrets
 
 if "apunte_generado" not in st.session_state:
     st.session_state.apunte_generado = "Aquí aparecerá el apunte médico ordenado con viñetas y negritas..."
@@ -47,43 +47,47 @@ with tab_apuntes:
     if st.button("✨ Estructurar Apunte", type="primary"):
         if texto_crudo.strip() == "":
             st.warning("⚠️ Por favor, pega el texto de la clase primero.")
+        elif not tiene_llave:
+            st.error("⚠️ No se encontró la llave de API en los secretos de Streamlit (Settings > Secrets).")
         else:
-            with st.spinner("🧠 Conectando con la IA (probando motores disponibles)..."):
-                
-                # TRUCO NINJA: Lista de motores de respaldo (Plan A, Plan B, Plan C)
-                modelos_posibles = ['gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro']
-                respuesta = None
-                ultimo_error = ""
-                
-                prompt = f"""
-                Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
-                Debes usar la siguiente estructura estrictamente:
-                - Títulos principales para los temas.
-                - Viñetas y sub-viñetas para organizar la información.
-                - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
-                - Elimina los titubeos del profesor y ve directo al grano.
-                
-                Texto de la clase:
-                {texto_crudo}
-                """
-
-                # El código probará cada motor hasta que uno funcione
-                for nombre_modelo in modelos_posibles:
-                    try:
-                        modelo = genai.GenerativeModel(nombre_modelo)
-                        respuesta = modelo.generate_content(prompt)
-                        break  # ¡Funcionó! Salimos del ciclo de intentos
-                    except Exception as e:
-                        ultimo_error = str(e)
-                        continue  # Este falló, probamos el siguiente motor
-                
-                if respuesta:
-                    # Si alguno de los 3 funcionó, guardamos y actualizamos
-                    st.session_state.apunte_generado = respuesta.text
-                    st.rerun()
-                else:
-                    # Si los 3 fallaron, mostramos el error
-                    st.error(f"Streamlit sigue bloqueando la conexión. Detalle técnico: {ultimo_error}")
+            with st.spinner("🧠 Conectando directo por vía intravenosa (REST API)..."):
+                try:
+                    prompt = f"""
+                    Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
+                    Debes usar la siguiente estructura estrictamente:
+                    - Títulos principales para los temas.
+                    - Viñetas y sub-viñetas para organizar la información.
+                    - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
+                    - Elimina los titubeos del profesor y ve directo al grano.
+                    
+                    Texto de la clase:
+                    {texto_crudo}
+                    """
+                    
+                    # Conexión directa a la API de Google sin intermediarios
+                    api_key = st.secrets["GEMINI_API_KEY"]
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+                    
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}]
+                    }
+                    headers = {"Content-Type": "application/json"}
+                    
+                    respuesta = requests.post(url, json=payload, headers=headers)
+                    datos = respuesta.json()
+                    
+                    if respuesta.status_code == 200:
+                        # Extraer el texto si la conexión fue exitosa
+                        texto_respuesta = datos['candidates'][0]['content']['parts'][0]['text']
+                        st.session_state.apunte_generado = texto_respuesta
+                        st.rerun()
+                    else:
+                        # Mostrar el error exacto que nos devuelva Google si algo falla
+                        mensaje_error = datos.get('error', {}).get('message', 'Error desconocido')
+                        st.error(f"Error directo del servidor de Google: {mensaje_error}")
+                        
+                except Exception as e:
+                    st.error(f"Ocurrió un error en la conexión: {e}")
         
     st.markdown("---")
     
