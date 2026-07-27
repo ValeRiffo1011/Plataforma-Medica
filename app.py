@@ -13,14 +13,12 @@ st.title("🩺 Mi Plataforma Clínica de Estudio")
 st.markdown("---")
 
 # ==========================================
-# 2. BARRA LATERAL (HISTORIAL)
+# 2. BARRA LATERAL (HISTORIAL LIMPIO)
 # ==========================================
 with st.sidebar:
     st.header("📁 Mis Apuntes")
-    st.caption("Documentos recientes")
-    st.button("📄 Ingreso Hospital Regional")
-    st.button("📄 Anamnesis - Paciente Cama 4")
-    st.button("📄 Apuntes Medicina Interna")
+    st.caption("Historial de estudio")
+    st.info("Tus apuntes guardados aparecerán aquí cuando presiones 'Guardar en Mis Apuntes'.")
 
 # ==========================================
 # 3. PESTAÑAS PRINCIPALES (LA TRINIDAD DE ORO)
@@ -51,9 +49,11 @@ with tab_apuntes:
     col_texto, col_imagenes = st.columns([3, 1])
     with col_texto:
         st.text_area("Apunte estructurado listo para editar:", height=300, value="Aquí aparecerá el apunte médico ordenado con viñetas y negritas...")
-        col_btn1, col_btn2 = st.columns(2)
-        col_btn1.button("📤 Exportar a PDF")
-        col_btn2.button("📝 Descargar en Word")
+        
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        col_btn1.button("💾 Guardar en Mis Apuntes")
+        col_btn2.button("📤 Exportar a PDF")
+        col_btn3.button("📝 Descargar en Word")
         
     with col_imagenes:
         st.info("🖼️ Banco de Diapositivas")
@@ -64,9 +64,26 @@ with tab_apuntes:
 # ------------------------------------------
 with tab_anki:
     st.subheader("Generador Automático de Tarjetas")
-    st.write("Genera flashcards directas a partir de tu apunte estructurado.")
+    st.write("Genera flashcards directas cruzando tus apuntes con literatura médica.")
+    
+    # Nuevas opciones de selección de material
+    col_fuente1, col_fuente2 = st.columns(2)
+    with col_fuente1:
+        apuntes_seleccionados_anki = st.multiselect(
+            "📚 1. Selecciona los apuntes base:", 
+            ["Apunte actual en pantalla", "Apuntes guardados (Próximamente)"], 
+            default=["Apunte actual en pantalla"]
+        )
+    with col_fuente2:
+        bibliografia_anki = st.file_uploader(
+            "📎 2. Sube bibliografía complementaria (Opcional - PDF, DOCX):", 
+            type=["pdf", "docx"], 
+            accept_multiple_files=True,
+            key="biblio_anki"
+        )
+
     if st.button("🧠 Crear Tarjetas Anki"):
-        st.info("Próximamente: La IA extraerá los conceptos clave para memorizar.")
+        st.info("Próximamente: La IA extraerá los conceptos clave fusionando tus apuntes y la bibliografía.")
         
     st.data_editor(
         {
@@ -84,11 +101,28 @@ with tab_anki:
 # ------------------------------------------
 with tab_tablas:
     st.subheader("Generador de Tablas de Alto Rendimiento")
-    st.write("Ideal para comparar patologías (Fisiopatología, Cuadro Clínico, Diagnóstico, Tratamiento).")
+    st.write("Compara patologías cruzando la clase del profesor con guías clínicas o papers.")
     
+    # Nuevas opciones de selección de material
+    col_fuente3, col_fuente4 = st.columns(2)
+    with col_fuente3:
+        apuntes_seleccionados_tablas = st.multiselect(
+            "📚 1. Selecciona los apuntes base:", 
+            ["Apunte actual en pantalla", "Apuntes guardados (Próximamente)"], 
+            default=["Apunte actual en pantalla"],
+            key="select_tablas"
+        )
+    with col_fuente4:
+        bibliografia_tablas = st.file_uploader(
+            "📎 2. Sube guías o papers complementarios (Opcional - PDF):", 
+            type=["pdf", "docx"], 
+            accept_multiple_files=True,
+            key="biblio_tablas"
+        )
+        
     tema_tabla = st.text_input("¿De qué temas quieres generar la tabla? (Ej: Patologías biliares)")
     if st.button("🚀 Generar Tabla Comparativa", type="primary"):
-        st.info("Próximamente: La IA armará la tabla clínica perfecta.")
+        st.info("Próximamente: La IA armará la tabla clínica perfecta cruzando ambas fuentes de información.")
         
     st.markdown("---")
     st.write("**Vista Previa:**")
