@@ -50,18 +50,10 @@ with tab_apuntes:
         if texto_crudo.strip() == "":
             st.warning("⚠️ Por favor, pega el texto de la clase primero.")
         else:
-            with st.spinner("🧠 Buscando el mejor motor disponible y estructurando tu apunte..."):
+            with st.spinner("🧠 Conectando con el motor estable de IA y estructurando tu apunte..."):
                 try:
-                    # TRUCO: Buscar automáticamente un motor compatible disponible
-                    modelo_elegido = 'gemini-1.5-flash' # Nombre de respaldo
-                    for m in genai.list_models():
-                        if 'generateContent' in m.supported_generation_methods:
-                            if 'flash' in m.name or 'pro' in m.name:
-                                modelo_elegido = m.name
-                                break
-                                
-                    # Conectar al modelo encontrado
-                    modelo = genai.GenerativeModel(modelo_elegido)
+                    # Forzamos el uso del modelo más estable y rápido disponible
+                    modelo = genai.GenerativeModel('gemini-1.5-flash')
                     
                     prompt = f"""
                     Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
