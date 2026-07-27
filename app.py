@@ -13,12 +13,16 @@ st.title("🩺 Mi Plataforma Clínica de Estudio")
 st.markdown("---")
 
 # ==========================================
-# 2. BARRA LATERAL (HISTORIAL LIMPIO)
+# 2. BARRA LATERAL (HISTORIAL)
 # ==========================================
 with st.sidebar:
     st.header("📁 Mis Apuntes")
     st.caption("Historial de estudio")
-    st.info("Tus apuntes guardados aparecerán aquí cuando presiones 'Guardar en Mis Apuntes'.")
+    
+    # Botón de ejemplo para visualizar cómo se verán los archivos guardados
+    st.button("📄 Ejemplo: Patología Biliar") 
+    
+    st.info("Al hacer clic en un apunte, se abrirá en la pantalla principal para que puedas editarlo o descargarlo (PDF/Word).")
 
 # ==========================================
 # 3. PESTAÑAS PRINCIPALES (LA TRINIDAD DE ORO)
@@ -125,7 +129,6 @@ with tab_tablas:
     st.markdown("---")
     st.write("**Vista Previa Editable:**")
     
-    # Aquí cambiamos la tabla estática por el editor interactivo
     st.data_editor(
         {
             "Enfermedad": ["Colecistitis", "Colangitis"],
@@ -138,7 +141,8 @@ with tab_tablas:
         use_container_width=True
     )
     
-    # Nuevos botones de descarga
-    col_btn_tabla1, col_btn_tabla2 = st.columns(2)
+    # Nuevos botones de descarga que incluyen PDF
+    col_btn_tabla1, col_btn_tabla2, col_btn_tabla3 = st.columns(3)
     col_btn_tabla1.button("📥 Descargar Tabla en Excel (.csv)", type="primary")
     col_btn_tabla2.button("📝 Descargar Tabla en Word")
+    col_btn_tabla3.button("📤 Descargar Tabla en PDF")
