@@ -52,8 +52,8 @@ with tab_apuntes:
         else:
             with st.spinner("🧠 Ordenando y estructurando clínicamente tu apunte..."):
                 try:
-                    # Instrucciones estrictas para la IA
-                    modelo = genai.GenerativeModel('gemini-1.5-flash')
+                    # Instrucciones estrictas para la IA con el modelo actualizado
+                    modelo = genai.GenerativeModel('gemini-pro')
                     prompt = f"""
                     Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
                     Debes usar la siguiente estructura estrictamente:
