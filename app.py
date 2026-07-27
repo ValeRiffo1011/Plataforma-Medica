@@ -4,7 +4,6 @@ import requests
 # ==========================================
 # 0. CONFIGURACIÓN DE LA IA Y MEMORIA
 # ==========================================
-# Verificamos si la llave existe en la caja fuerte
 tiene_llave = "GEMINI_API_KEY" in st.secrets
 
 if "apunte_generado" not in st.session_state:
@@ -50,41 +49,63 @@ with tab_apuntes:
         elif not tiene_llave:
             st.error("⚠️ No se encontró la llave de API en los secretos de Streamlit (Settings > Secrets).")
         else:
-            with st.spinner("🧠 Conectando directo por vía intravenosa (REST API)..."):
+            with st.spinner("🧠 Pidiendo el menú de motores a Google y estructurando..."):
                 try:
-                    prompt = f"""
-                    Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
-                    Debes usar la siguiente estructura estrictamente:
-                    - Títulos principales para los temas.
-                    - Viñetas y sub-viñetas para organizar la información.
-                    - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
-                    - Elimina los titubeos del profesor y ve directo al grano.
-                    
-                    Texto de la clase:
-                    {texto_crudo}
-                    """
-                    
-                    # Conexión directa a la API de Google sin intermediarios
                     api_key = st.secrets["GEMINI_API_KEY"]
-                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
                     
-                    payload = {
-                        "contents": [{"parts": [{"text": prompt}]}]
-                    }
-                    headers = {"Content-Type": "application/json"}
+                    # PASO 1: Pedirle el menú de modelos a Google
+                    url_menu = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+                    respuesta_menu = requests.get(url_menu)
                     
-                    respuesta = requests.post(url, json=payload, headers=headers)
-                    datos = respuesta.json()
-                    
-                    if respuesta.status_code == 200:
-                        # Extraer el texto si la conexión fue exitosa
-                        texto_respuesta = datos['candidates'][0]['content']['parts'][0]['text']
-                        st.session_state.apunte_generado = texto_respuesta
-                        st.rerun()
+                    if respuesta_menu.status_code == 200:
+                        modelos = respuesta_menu.json().get("models", [])
+                        modelo_elegido = None
+                        
+                        # Buscar el primer modelo que sirva para generar texto
+                        for m in modelos:
+                            if "generateContent" in m.get("supportedGenerationMethods", []):
+                                if "flash" in m["name"] or "pro" in m["name"]:
+                                    modelo_elegido = m["name"]
+                                    break
+                                    
+                        # Si no encuentra uno con "flash" o "pro", agarra el primero que sirva
+                        if not modelo_elegido:
+                            for m in modelos:
+                                if "generateContent" in m.get("supportedGenerationMethods", []):
+                                    modelo_elegido = m["name"]
+                                    break
+                                    
+                        if modelo_elegido:
+                            # PASO 2: Usar EXACTAMENTE el modelo que Google nos dio
+                            prompt = f"""
+                            Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
+                            Debes usar la siguiente estructura estrictamente:
+                            - Títulos principales para los temas.
+                            - Viñetas y sub-viñetas para organizar la información.
+                            - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
+                            - Elimina los titubeos del profesor y ve directo al grano.
+                            
+                            Texto de la clase:
+                            {texto_crudo}
+                            """
+                            
+                            url_generar = f"https://generativelanguage.googleapis.com/v1beta/{modelo_elegido}:generateContent?key={api_key}"
+                            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                            headers = {"Content-Type": "application/json"}
+                            
+                            respuesta_gen = requests.post(url_generar, json=payload, headers=headers)
+                            datos_gen = respuesta_gen.json()
+                            
+                            if respuesta_gen.status_code == 200:
+                                texto_respuesta = datos_gen['candidates'][0]['content']['parts'][0]['text']
+                                st.session_state.apunte_generado = texto_respuesta
+                                st.rerun()
+                            else:
+                                st.error(f"Error al generar con {modelo_elegido}: {datos_gen.get('error', {}).get('message')}")
+                        else:
+                            st.error("Tu llave no tiene acceso a ningún modelo de generación de texto.")
                     else:
-                        # Mostrar el error exacto que nos devuelva Google si algo falla
-                        mensaje_error = datos.get('error', {}).get('message', 'Error desconocido')
-                        st.error(f"Error directo del servidor de Google: {mensaje_error}")
+                        st.error("No se pudo obtener la lista de modelos de Google.")
                         
                 except Exception as e:
                     st.error(f"Ocurrió un error en la conexión: {e}")
