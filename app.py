@@ -97,7 +97,7 @@ with tab_apuntes:
         elif not tiene_llave:
             st.error("⚠️ No se encontró la llave de API en los secretos de Streamlit (Settings > Secrets).")
         else:
-            with st.spinner("🧠 Buscando un modelo Gemini disponible y estructurando..."):
+            with st.spinner("🧠 Estructurando el apunte y verificando que no falte nada (2 pasadas)..."):
                 try:
                     api_key = st.secrets["GEMINI_API_KEY"]
 
@@ -207,40 +207,64 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
                             + candidatos_otros
                         )
 
-                        # PASO 2: Probar cada candidato HASTA que uno realmente funcione.
-                        # Esto es clave porque el listado de /models puede incluir modelos
-                        # que ya no están disponibles para tu llave (como pasó con
-                        # gemini-2.5-flash), y eso solo se sabe al intentar generar.
-                        for candidato in candidatos:
-                            url_generar = f"https://generativelanguage.googleapis.com/v1beta/{candidato}:generateContent?key={api_key}"
-                            payload = {
-                                "contents": [{"parts": [{"text": prompt}]}],
-                                "generationConfig": {
-                                    "maxOutputTokens": 8192,
-                                    "temperature": 0.3,
-                                },
-                            }
-                            headers = {"Content-Type": "application/json"}
+                        def intentar_generar(prompt_a_usar):
+                            """Intenta generar contenido probando cada candidato hasta que uno funcione.
+                            Devuelve (texto_generado, modelo_usado, lista_de_errores)."""
+                            errores_local = []
+                            for candidato in candidatos:
+                                url_generar = f"https://generativelanguage.googleapis.com/v1beta/{candidato}:generateContent?key={api_key}"
+                                payload = {
+                                    "contents": [{"parts": [{"text": prompt_a_usar}]}],
+                                    "generationConfig": {
+                                        "maxOutputTokens": 8192,
+                                        "temperature": 0.3,
+                                    },
+                                }
+                                headers = {"Content-Type": "application/json"}
 
-                            respuesta_gen = requests.post(url_generar, json=payload, headers=headers)
-                            datos_gen = respuesta_gen.json()
+                                respuesta_gen = requests.post(url_generar, json=payload, headers=headers)
+                                datos_gen = respuesta_gen.json()
 
-                            if respuesta_gen.status_code == 200:
-                                texto_respuesta = datos_gen["candidates"][0]["content"]["parts"][0]["text"]
-                                modelo_final = candidato
-                                break
-                            else:
-                                mensaje_error = datos_gen.get("error", {}).get("message", "Error desconocido")
-                                errores.append(f"{candidato}: {mensaje_error}")
-                                # Si el modelo ya no está disponible, seguimos probando el siguiente.
-                                # Si es otro tipo de error (ej. llave inválida), igual seguimos,
-                                # pero lo dejamos registrado para mostrarlo si nada funciona.
-                                continue
+                                if respuesta_gen.status_code == 200:
+                                    return datos_gen["candidates"][0]["content"]["parts"][0]["text"], candidato, errores_local
+                                else:
+                                    mensaje_error = datos_gen.get("error", {}).get("message", "Error desconocido")
+                                    errores_local.append(f"{candidato}: {mensaje_error}")
+                                    continue
+                            return None, None, errores_local
+
+                        # PASO 2: Primera pasada — estructurar el apunte según la plantilla.
+                        texto_respuesta, modelo_final, errores = intentar_generar(prompt)
 
                         if texto_respuesta:
+                            # PASO 3: Segunda pasada — verificar completitud contra el material
+                            # fuente y completar cualquier dato, mecanismo, especie o subsección
+                            # que se haya quedado fuera en la primera pasada.
+                            prompt_verificacion = f"""
+Eres un editor experto en apuntes médicos. Tu tarea es comparar dos textos: (1) el MATERIAL FUENTE original de una clase de medicina, y (2) un APUNTE YA ESTRUCTURADO generado a partir de ese material, siguiendo un formato específico (títulos, viñetas, cajas de trampa de examen, citas del profesor, etc.).
+
+Tu trabajo:
+1. Revisa el MATERIAL FUENTE en detalle y detecta cualquier dato clínico, mecanismo, cifra, nombre de fármaco, especie, subsección o ejemplo que NO esté reflejado en el APUNTE YA ESTRUCTURADO.
+2. Agrega esa información faltante directamente en el lugar más adecuado del apunte, manteniendo el mismo formato y estilo (Markdown, negritas, cajas especiales) que ya tiene.
+3. NO elimines ni resumas nada de lo que ya está en el apunte. Solo puedes AGREGAR contenido faltante o corregir errores factuales evidentes.
+4. Si después de revisar no falta nada, devuelve el apunte exactamente igual, sin cambios.
+
+Responde ÚNICAMENTE con el apunte final completo (ya corregido si era necesario), listo para pegar en un editor de texto. No agregues comentarios tuyos ni expliques qué cambiaste.
+
+# MATERIAL FUENTE:
+{texto_crudo}
+
+# APUNTE YA ESTRUCTURADO (a verificar y completar):
+{texto_respuesta}
+"""
+                            texto_verificado, modelo_verificacion, errores_verificacion = intentar_generar(prompt_verificacion)
+
+                            if texto_verificado:
+                                texto_respuesta = texto_verificado
+
                             st.session_state.apunte_generado = texto_respuesta
                             st.session_state.apunte_version += 1
-                            st.success(f"✅ Generado con el modelo: {modelo_final}")
+                            st.success(f"✅ Generado con {modelo_final} y verificado con {modelo_verificacion or 'N/A'}")
                             st.rerun()
                         else:
                             st.error(
