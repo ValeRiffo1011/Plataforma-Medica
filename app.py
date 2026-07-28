@@ -207,7 +207,7 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
                             + candidatos_otros
                         )
 
-                        def intentar_generar(prompt_a_usar):
+                        def intentar_generar(prompt_a_usar, max_tokens=8192):
                             """Intenta generar contenido probando cada candidato hasta que uno funcione.
                             Devuelve (texto_generado, modelo_usado, lista_de_errores)."""
                             errores_local = []
@@ -216,7 +216,7 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
                                 payload = {
                                     "contents": [{"parts": [{"text": prompt_a_usar}]}],
                                     "generationConfig": {
-                                        "maxOutputTokens": 8192,
+                                        "maxOutputTokens": max_tokens,
                                         "temperature": 0.3,
                                     },
                                 }
@@ -234,7 +234,7 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
                             return None, None, errores_local
 
                         # PASO 2: Primera pasada — estructurar el apunte según la plantilla.
-                        texto_respuesta, modelo_final, errores = intentar_generar(prompt)
+                        texto_respuesta, modelo_final, errores = intentar_generar(prompt, max_tokens=10000)
 
                         if texto_respuesta:
                             # PASO 3: Segunda pasada — verificar completitud contra el material
@@ -244,27 +244,46 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
 Eres un editor experto en apuntes médicos. Tu tarea es comparar dos textos: (1) el MATERIAL FUENTE original de una clase de medicina, y (2) un APUNTE YA ESTRUCTURADO generado a partir de ese material, siguiendo un formato específico (títulos, viñetas, cajas de trampa de examen, citas del profesor, etc.).
 
 Tu trabajo:
-1. Revisa el MATERIAL FUENTE en detalle y detecta cualquier dato clínico, mecanismo, cifra, nombre de fármaco, especie, subsección o ejemplo que NO esté reflejado en el APUNTE YA ESTRUCTURADO.
-2. Agrega esa información faltante directamente en el lugar más adecuado del apunte, manteniendo el mismo formato y estilo (Markdown, negritas, cajas especiales) que ya tiene.
-3. NO elimines ni resumas nada de lo que ya está en el apunte. Solo puedes AGREGAR contenido faltante o corregir errores factuales evidentes.
-4. Si después de revisar no falta nada, devuelve el apunte exactamente igual, sin cambios.
+1. Parte SIEMPRE desde el APUNTE YA ESTRUCTURADO tal cual está, con TODO su formato Markdown (##, **, las cajas ⚠️/💬/📋/🔬, la tabla final). Ese formato NUNCA se debe perder, aplanar ni convertir a texto plano.
+2. Revisa el MATERIAL FUENTE en detalle y detecta cualquier dato clínico, mecanismo, cifra, nombre de fármaco, especie, subsección o ejemplo que NO esté reflejado en el apunte.
+3. Agrega ÚNICAMENTE esa información faltante, insertándola en el lugar más adecuado y usando el mismo estilo de formato (Markdown, negritas, cajas especiales) que el resto del apunte ya tiene.
+4. Está PROHIBIDO reescribir el apunte desde cero, reordenarlo por completo, quitarle el formato Markdown, o hacerlo parecerse más al material fuente en bruto. Si no falta nada, devuelve el apunte de entrada exactamente igual, carácter por carácter.
 
-Responde ÚNICAMENTE con el apunte final completo (ya corregido si era necesario), listo para pegar en un editor de texto. No agregues comentarios tuyos ni expliques qué cambiaste.
+Responde ÚNICAMENTE con el apunte final completo, listo para pegar en un editor de texto. No agregues comentarios tuyos ni expliques qué cambiaste.
 
 # MATERIAL FUENTE:
 {texto_crudo}
 
-# APUNTE YA ESTRUCTURADO (a verificar y completar):
+# APUNTE YA ESTRUCTURADO (a verificar y completar, partiendo de este formato):
 {texto_respuesta}
 """
-                            texto_verificado, modelo_verificacion, errores_verificacion = intentar_generar(prompt_verificacion)
+                            texto_verificado, modelo_verificacion, errores_verificacion = intentar_generar(
+                                prompt_verificacion, max_tokens=16384
+                            )
 
-                            if texto_verificado:
+                            # Validación de seguridad: si la verificación degradó el formato
+                            # (menos negritas/títulos que el original) o el modelo la cortó a
+                            # medio camino, descartamos el resultado y nos quedamos con la
+                            # primera pasada, que sabemos que tenía buen formato.
+                            verificacion_valida = (
+                                texto_verificado
+                                and texto_verificado.count("**") >= texto_respuesta.count("**") * 0.7
+                                and texto_verificado.count("##") >= texto_respuesta.count("##") * 0.7
+                                and len(texto_verificado) >= len(texto_respuesta) * 0.8
+                            )
+
+                            if verificacion_valida:
                                 texto_respuesta = texto_verificado
+                                st.success(f"✅ Generado con {modelo_final} y verificado con {modelo_verificacion}")
+                            else:
+                                st.warning(
+                                    "⚠️ La verificación de completitud no dio un resultado confiable "
+                                    "(perdió formato o quedó incompleta), así que se mantuvo la primera "
+                                    "versión generada, sin la verificación extra."
+                                )
 
                             st.session_state.apunte_generado = texto_respuesta
                             st.session_state.apunte_version += 1
-                            st.success(f"✅ Generado con {modelo_final} y verificado con {modelo_verificacion or 'N/A'}")
                             st.rerun()
                         else:
                             st.error(
