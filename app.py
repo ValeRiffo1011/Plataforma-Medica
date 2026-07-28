@@ -49,64 +49,97 @@ with tab_apuntes:
         elif not tiene_llave:
             st.error("⚠️ No se encontró la llave de API en los secretos de Streamlit (Settings > Secrets).")
         else:
-            with st.spinner("🧠 Pidiendo el menú de motores a Google y estructurando..."):
+            with st.spinner("🧠 Buscando un modelo Gemini disponible y estructurando..."):
                 try:
                     api_key = st.secrets["GEMINI_API_KEY"]
-                    
+
+                    prompt = f"""
+                    Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
+                    Debes usar la siguiente estructura estrictamente:
+                    - Títulos principales para los temas.
+                    - Viñetas y sub-viñetas para organizar la información.
+                    - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
+                    - Elimina los titubeos del profesor y ve directo al grano.
+
+                    Texto de la clase:
+                    {texto_crudo}
+                    """
+
                     # PASO 1: Pedirle el menú de modelos a Google
                     url_menu = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                     respuesta_menu = requests.get(url_menu)
-                    
+
+                    modelo_final = None
+                    texto_respuesta = None
+                    errores = []
+
                     if respuesta_menu.status_code == 200:
                         modelos = respuesta_menu.json().get("models", [])
-                        modelo_elegido = None
-                        
-                        # Buscar el primer modelo que sirva para generar texto
+
+                        # Armamos una lista de candidatos ordenada por preferencia:
+                        # 1) modelos "flash" recientes (más baratos/rápidos)
+                        # 2) modelos "pro" recientes
+                        # 3) cualquier otro que soporte generateContent
+                        candidatos_flash = []
+                        candidatos_pro = []
+                        candidatos_otros = []
+
                         for m in modelos:
-                            if "generateContent" in m.get("supportedGenerationMethods", []):
-                                if "flash" in m["name"] or "pro" in m["name"]:
-                                    modelo_elegido = m["name"]
-                                    break
-                                    
-                        # Si no encuentra uno con "flash" o "pro", agarra el primero que sirva
-                        if not modelo_elegido:
-                            for m in modelos:
-                                if "generateContent" in m.get("supportedGenerationMethods", []):
-                                    modelo_elegido = m["name"]
-                                    break
-                                    
-                        if modelo_elegido:
-                            # PASO 2: Usar EXACTAMENTE el modelo que Google nos dio
-                            prompt = f"""
-                            Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
-                            Debes usar la siguiente estructura estrictamente:
-                            - Títulos principales para los temas.
-                            - Viñetas y sub-viñetas para organizar la información.
-                            - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
-                            - Elimina los titubeos del profesor y ve directo al grano.
-                            
-                            Texto de la clase:
-                            {texto_crudo}
-                            """
-                            
-                            url_generar = f"https://generativelanguage.googleapis.com/v1beta/{modelo_elegido}:generateContent?key={api_key}"
+                            nombre = m.get("name", "")
+                            metodos = m.get("supportedGenerationMethods", [])
+                            if "generateContent" not in metodos:
+                                continue
+                            if "flash" in nombre:
+                                candidatos_flash.append(nombre)
+                            elif "pro" in nombre:
+                                candidatos_pro.append(nombre)
+                            else:
+                                candidatos_otros.append(nombre)
+
+                        # Preferimos los nombres más "nuevos" primero (orden alfabético inverso
+                        # suele poner versiones más altas antes, ej. 3.x antes que 2.x)
+                        candidatos = (
+                            sorted(candidatos_flash, reverse=True)
+                            + sorted(candidatos_pro, reverse=True)
+                            + candidatos_otros
+                        )
+
+                        # PASO 2: Probar cada candidato HASTA que uno realmente funcione.
+                        # Esto es clave porque el listado de /models puede incluir modelos
+                        # que ya no están disponibles para tu llave (como pasó con
+                        # gemini-2.5-flash), y eso solo se sabe al intentar generar.
+                        for candidato in candidatos:
+                            url_generar = f"https://generativelanguage.googleapis.com/v1beta/{candidato}:generateContent?key={api_key}"
                             payload = {"contents": [{"parts": [{"text": prompt}]}]}
                             headers = {"Content-Type": "application/json"}
-                            
+
                             respuesta_gen = requests.post(url_generar, json=payload, headers=headers)
                             datos_gen = respuesta_gen.json()
-                            
+
                             if respuesta_gen.status_code == 200:
-                                texto_respuesta = datos_gen['candidates'][0]['content']['parts'][0]['text']
-                                st.session_state.apunte_generado = texto_respuesta
-                                st.rerun()
+                                texto_respuesta = datos_gen["candidates"][0]["content"]["parts"][0]["text"]
+                                modelo_final = candidato
+                                break
                             else:
-                                st.error(f"Error al generar con {modelo_elegido}: {datos_gen.get('error', {}).get('message')}")
+                                mensaje_error = datos_gen.get("error", {}).get("message", "Error desconocido")
+                                errores.append(f"{candidato}: {mensaje_error}")
+                                # Si el modelo ya no está disponible, seguimos probando el siguiente.
+                                # Si es otro tipo de error (ej. llave inválida), igual seguimos,
+                                # pero lo dejamos registrado para mostrarlo si nada funciona.
+                                continue
+
+                        if texto_respuesta:
+                            st.session_state.apunte_generado = texto_respuesta
+                            st.success(f"✅ Generado con el modelo: {modelo_final}")
+                            st.rerun()
                         else:
-                            st.error("Tu llave no tiene acceso a ningún modelo de generación de texto.")
+                            st.error(
+                                "Ningún modelo disponible pudo generar el apunte. Detalle de errores:\n\n"
+                                + "\n".join(errores)
+                            )
                     else:
                         st.error("No se pudo obtener la lista de modelos de Google.")
-                        
+
                 except Exception as e:
                     st.error(f"Ocurrió un error en la conexión: {e}")
         
