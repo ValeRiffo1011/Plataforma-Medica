@@ -146,6 +146,9 @@ Significado: [por qué importa este hallazgo para el tema, si el profesor lo exp
 📋 **LO QUE PREGUNTA EL PROFESOR**
 [Contenido resumido de la pista, en 1-3 líneas]
 
+# AUTO-VERIFICACIÓN DE COMPLETITUD (haz esto ANTES de escribir tu respuesta final)
+Primero, identifica mentalmente TODAS las subsecciones, géneros, especies, fármacos, vacunas y "otras especies de interés" que se mencionan en el material fuente, incluso si aparecen solo brevemente al final de un tema (por ejemplo: listados tipo "otras especies de X", "especies representativas", "grupos de riesgo", "diagnóstico de laboratorio" de cada patógeno). Ninguna de estas subsecciones puede faltar en tu apunte final, aunque sea con menos desarrollo que el tema principal. Omitir una subsección completa es un error grave, incluso si te parece "secundaria" o "menos importante para el examen".
+
 # CIERRE DEL DOCUMENTO
 Al final del apunte, agrega SIEMPRE estas dos secciones:
 
@@ -210,7 +213,13 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
                         # gemini-2.5-flash), y eso solo se sabe al intentar generar.
                         for candidato in candidatos:
                             url_generar = f"https://generativelanguage.googleapis.com/v1beta/{candidato}:generateContent?key={api_key}"
-                            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+                            payload = {
+                                "contents": [{"parts": [{"text": prompt}]}],
+                                "generationConfig": {
+                                    "maxOutputTokens": 8192,
+                                    "temperature": 0.3,
+                                },
+                            }
                             headers = {"Content-Type": "application/json"}
 
                             respuesta_gen = requests.post(url_generar, json=payload, headers=headers)
