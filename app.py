@@ -112,7 +112,7 @@ with tab_apuntes:
         elif not tiene_llave:
             st.error("⚠️ No se encontró la llave de API en los secretos de Streamlit (Settings > Secrets).")
         else:
-            with st.spinner("🧠 Estructurando el apunte y verificando que no falte nada (2 pasadas)..."):
+            with st.spinner("🧠 Estructurando el apunte (con reintentos si falta formato) y verificando completitud..."):
                 try:
                     api_key = st.secrets["GEMINI_API_KEY"]
 
@@ -248,10 +248,29 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
                                     continue
                             return None, None, errores_local
 
-                        # PASO 2: Primera pasada — estructurar el apunte según la plantilla.
-                        texto_respuesta, modelo_final, errores = intentar_generar(prompt, max_tokens=10000)
+                        def cumple_formato_minimo(texto):
+                            """Chequeo absoluto: el apunte debe tener sí o sí títulos, negritas y
+                            la tabla resumen final. Si no cumple, no sirve como apunte final."""
+                            if not texto:
+                                return False
+                            tiene_titulos = texto.count("##") >= 2
+                            tiene_negritas = texto.count("**") >= 10
+                            tiene_tabla_final = "tabla resumen" in texto.lower()
+                            return tiene_titulos and tiene_negritas and tiene_tabla_final
 
-                        if texto_respuesta:
+                        # PASO 2: Primera pasada — estructurar el apunte según la plantilla.
+                        # Reintentamos hasta 3 veces si el resultado no cumple el formato mínimo
+                        # (títulos, negritas y tabla resumen), ya que a veces el modelo se salta
+                        # el formato por completo sin avisar.
+                        texto_respuesta, modelo_final, errores = None, None, []
+                        for intento in range(3):
+                            texto_respuesta, modelo_final, errores = intentar_generar(prompt, max_tokens=10000)
+                            if cumple_formato_minimo(texto_respuesta):
+                                break
+
+                        primera_pasada_ok = cumple_formato_minimo(texto_respuesta)
+
+                        if texto_respuesta and primera_pasada_ok:
                             # PASO 3: Segunda pasada — verificar completitud contra el material
                             # fuente y completar cualquier dato, mecanismo, especie o subsección
                             # que se haya quedado fuera en la primera pasada.
@@ -263,6 +282,7 @@ Tu trabajo:
 2. Revisa el MATERIAL FUENTE en detalle y detecta cualquier dato clínico, mecanismo, cifra, nombre de fármaco, especie, subsección o ejemplo que NO esté reflejado en el apunte.
 3. Agrega ÚNICAMENTE esa información faltante, insertándola en el lugar más adecuado y usando el mismo estilo de formato (Markdown, negritas, cajas especiales) que el resto del apunte ya tiene.
 4. Está PROHIBIDO reescribir el apunte desde cero, reordenarlo por completo, quitarle el formato Markdown, o hacerlo parecerse más al material fuente en bruto. Si no falta nada, devuelve el apunte de entrada exactamente igual, carácter por carácter.
+5. Tu respuesta DEBE conservar la sección "Tabla resumen final" completa. Nunca la elimines ni la dejes a medias.
 
 Responde ÚNICAMENTE con el apunte final completo, listo para pegar en un editor de texto. No agregues comentarios tuyos ni expliques qué cambiaste.
 
@@ -277,11 +297,12 @@ Responde ÚNICAMENTE con el apunte final completo, listo para pegar en un editor
                             )
 
                             # Validación de seguridad: si la verificación degradó el formato
-                            # (menos negritas/títulos que el original) o el modelo la cortó a
-                            # medio camino, descartamos el resultado y nos quedamos con la
-                            # primera pasada, que sabemos que tenía buen formato.
+                            # (menos negritas/títulos que el original), quedó incompleta (sin
+                            # tabla resumen), o el modelo la cortó a medio camino, descartamos
+                            # el resultado y nos quedamos con la primera pasada.
                             verificacion_valida = (
                                 texto_verificado
+                                and cumple_formato_minimo(texto_verificado)
                                 and texto_verificado.count("**") >= texto_respuesta.count("**") * 0.7
                                 and texto_verificado.count("##") >= texto_respuesta.count("##") * 0.7
                                 and len(texto_verificado) >= len(texto_respuesta) * 0.8
@@ -299,6 +320,18 @@ Responde ÚNICAMENTE con el apunte final completo, listo para pegar en un editor
 
                             st.session_state.apunte_generado = texto_respuesta
                             st.session_state.apunte_version += 1
+                            st.rerun()
+                        elif texto_respuesta:
+                            # La primera pasada nunca cumplió el formato mínimo tras 3 intentos.
+                            # Igual te lo mostramos (es mejor que nada), pero con una advertencia
+                            # clara de que no tiene el formato esperado.
+                            st.session_state.apunte_generado = texto_respuesta
+                            st.session_state.apunte_version += 1
+                            st.warning(
+                                "⚠️ Tras 3 intentos, el modelo no logró aplicar el formato completo "
+                                "(títulos, negritas y tabla resumen). Te dejamos igual el mejor resultado "
+                                "obtenido, pero revísalo con cuidado o intenta generar de nuevo."
+                            )
                             st.rerun()
                         else:
                             st.error(
