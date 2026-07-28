@@ -1,13 +1,36 @@
 import streamlit as st
 import requests
+import json
+import os
+from datetime import datetime
 
 # ==========================================
 # 0. CONFIGURACIÓN DE LA IA Y MEMORIA
 # ==========================================
 tiene_llave = "GEMINI_API_KEY" in st.secrets
 
+ARCHIVO_APUNTES = "mis_apuntes.json"
+
+def cargar_apuntes_guardados():
+    """Lee los apuntes guardados desde un archivo JSON en disco."""
+    if os.path.exists(ARCHIVO_APUNTES):
+        try:
+            with open(ARCHIVO_APUNTES, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def guardar_apuntes_en_disco(lista):
+    """Escribe la lista completa de apuntes en el archivo JSON."""
+    with open(ARCHIVO_APUNTES, "w", encoding="utf-8") as f:
+        json.dump(lista, f, ensure_ascii=False, indent=2)
+
 if "apunte_generado" not in st.session_state:
     st.session_state.apunte_generado = "Aquí aparecerá el apunte médico ordenado con viñetas y negritas..."
+
+if "lista_apuntes" not in st.session_state:
+    st.session_state.lista_apuntes = cargar_apuntes_guardados()
 
 # ==========================================
 # 1. CONFIGURACIÓN INICIAL DE LA PÁGINA
@@ -23,7 +46,17 @@ st.markdown("---")
 with st.sidebar:
     st.header("📁 Mis Apuntes")
     st.caption("Historial de estudio")
-    st.button("📄 Ejemplo: Patología Biliar") 
+
+    if len(st.session_state.lista_apuntes) == 0:
+        st.info("Todavía no has guardado ningún apunte. Genera uno y usa el botón '💾 Guardar en Mis Apuntes'.")
+    else:
+        # Mostramos los más recientes primero
+        for i, apunte in enumerate(reversed(st.session_state.lista_apuntes)):
+            indice_real = len(st.session_state.lista_apuntes) - 1 - i
+            if st.button(f"📄 {apunte['titulo']}", key=f"abrir_apunte_{indice_real}"):
+                st.session_state.apunte_generado = apunte["contenido"]
+                st.rerun()
+
     st.info("Al hacer clic en un apunte, se abrirá en la pantalla principal para que puedas editarlo o descargarlo (PDF/Word).")
 
 # ==========================================
@@ -200,9 +233,27 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
     col_texto, col_imagenes = st.columns([3, 1])
     with col_texto:
         texto_final = st.text_area("Apunte estructurado listo para editar:", height=400, value=st.session_state.apunte_generado)
-        
+
+        titulo_apunte = st.text_input(
+            "Nombre para guardar este apunte:",
+            value=(ramo_codigo.strip() if ramo_codigo.strip() else "Apunte sin título")
+        )
+
         col_btn1, col_btn2, col_btn3 = st.columns(3)
-        col_btn1.button("💾 Guardar en Mis Apuntes")
+        if col_btn1.button("💾 Guardar en Mis Apuntes"):
+            if texto_final.strip() == "":
+                st.warning("⚠️ No hay contenido para guardar todavía.")
+            else:
+                nuevo_apunte = {
+                    "titulo": titulo_apunte.strip() or "Apunte sin título",
+                    "contenido": texto_final,
+                    "fecha_guardado": datetime.now().strftime("%d-%m-%Y %H:%M"),
+                }
+                st.session_state.lista_apuntes.append(nuevo_apunte)
+                guardar_apuntes_en_disco(st.session_state.lista_apuntes)
+                st.session_state.apunte_generado = texto_final
+                st.success(f"✅ Apunte '{nuevo_apunte['titulo']}' guardado. Aparecerá en la barra lateral.")
+                st.rerun()
         col_btn2.button("📤 Exportar a PDF")
         col_btn3.button("📝 Descargar en Word")
         
