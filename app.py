@@ -45,8 +45,9 @@ def guardar_apuntes_en_disco(lista):
 def normalizar_imagen(image_bytes):
     """Abre los bytes de una imagen con PIL, corrige el espacio de color si viene
     en CMYK (causa típica de imágenes que se ven negras/invertidas), y la
-    re-codifica siempre como PNG. Devuelve None si la imagen no es válida o es
-    un formato vectorial (EMF/WMF) que no se puede mostrar como foto."""
+    re-codifica siempre como PNG. Devuelve None si la imagen no es válida, es
+    un formato vectorial (EMF/WMF), o el PNG resultante es sospechosamente
+    chico (probable corrupción)."""
     try:
         from PIL import Image
         img = Image.open(io.BytesIO(image_bytes))
@@ -59,16 +60,19 @@ def normalizar_imagen(image_bytes):
             img = img.convert("RGB")
         buffer = io.BytesIO()
         img.save(buffer, format="PNG")
-        return buffer.getvalue(), img.size
+        png_bytes = buffer.getvalue()
+        if len(png_bytes) < 500:
+            return None, None  # demasiado chico/vacío, probable imagen corrupta
+        return png_bytes, img.size
     except Exception:
         return None, None
 
 
 def extraer_imagenes_pptx(archivo_subido):
     """Extrae las imágenes de un archivo .pptx, devolviendo una lista de
-    diccionarios {numero_diapositiva, bytes_imagen}. Descarta duplicados
-    (logos/fondos repetidos en cada diapositiva), formatos vectoriales
-    (EMF/WMF) e imágenes muy pequeñas (iconos decorativos)."""
+    diccionarios {numero_diapositiva, bytes_imagen, ancho, alto}. Descarta
+    duplicados (logos/fondos repetidos en cada diapositiva) y formatos
+    vectoriales (EMF/WMF). El filtro de tamaño se aplica luego en la UI."""
     from pptx.enum.shapes import MSO_SHAPE_TYPE
 
     imagenes = []
@@ -92,10 +96,13 @@ def extraer_imagenes_pptx(archivo_subido):
                 png_bytes, tamano = normalizar_imagen(image.blob)
                 if png_bytes is None:
                     continue
-                if tamano[0] < 150 and tamano[1] < 150:
-                    continue  # ícono/logo decorativo, muy chico para ser un diagrama útil
                 hashes_vistos.add(hash_imagen)
-                imagenes.append({"diapositiva": numero_diapositiva, "bytes": png_bytes})
+                imagenes.append({
+                    "diapositiva": numero_diapositiva,
+                    "bytes": png_bytes,
+                    "ancho": tamano[0],
+                    "alto": tamano[1],
+                })
             except Exception:
                 continue
 
@@ -107,8 +114,8 @@ def extraer_imagenes_pptx(archivo_subido):
 
 def extraer_imagenes_pdf(archivo_subido):
     """Extrae las imágenes embebidas de un archivo .pdf, devolviendo una lista
-    de diccionarios {numero_diapositiva, bytes_imagen}. Descarta duplicados,
-    corrige color CMYK y filtra imágenes muy pequeñas."""
+    de diccionarios {numero_diapositiva, bytes_imagen, ancho, alto}. Descarta
+    duplicados y corrige color CMYK. El filtro de tamaño se aplica luego en la UI."""
     imagenes = []
     hashes_vistos = set()
     datos_pdf = archivo_subido.read()
@@ -117,6 +124,12 @@ def extraer_imagenes_pdf(archivo_subido):
         pagina = doc[numero_pagina]
         for img_info in pagina.get_images(full=True):
             xref = img_info[0]
+            ancho_nativo, alto_nativo = img_info[2], img_info[3]
+            # Pre-filtro barato usando metadata, sin decodificar: descarta
+            # de entrada fragmentos/mosaicos diminutos (< 40x40 px) que casi
+            # siempre son artefactos de la exportación, no contenido real.
+            if ancho_nativo < 40 or alto_nativo < 40:
+                continue
             try:
                 base_image = doc.extract_image(xref)
                 image_bytes = base_image["image"]
@@ -126,10 +139,13 @@ def extraer_imagenes_pdf(archivo_subido):
                 png_bytes, tamano = normalizar_imagen(image_bytes)
                 if png_bytes is None:
                     continue
-                if tamano[0] < 150 and tamano[1] < 150:
-                    continue
                 hashes_vistos.add(hash_imagen)
-                imagenes.append({"diapositiva": numero_pagina + 1, "bytes": png_bytes})
+                imagenes.append({
+                    "diapositiva": numero_pagina + 1,
+                    "bytes": png_bytes,
+                    "ancho": tamano[0],
+                    "alto": tamano[1],
+                })
             except Exception:
                 continue
     doc.close()
@@ -522,18 +538,28 @@ Responde ÚNICAMENTE con el apunte final completo, listo para pegar en un editor
     if not st.session_state.banco_imagenes:
         st.caption("Sube una presentación arriba para ver aquí sus imágenes.")
     else:
+        total_encontradas = len(st.session_state.banco_imagenes)
+        tamano_minimo = st.slider(
+            "Tamaño mínimo a mostrar (px, en su lado más largo)",
+            min_value=50, max_value=800, value=250, step=25,
+            help="Sube este valor si aparecen íconos, logos o fragmentos pequeños que no quieres ver. Bájalo si falta algún diagrama chico.",
+        )
+        imagenes_filtradas = [
+            img for img in st.session_state.banco_imagenes
+            if max(img["ancho"], img["alto"]) >= tamano_minimo
+        ]
         st.caption(
-            f"{len(st.session_state.banco_imagenes)} imágenes encontradas. "
-            "Descárgalas y pégalas manualmente donde correspondan en el editor."
+            f"{total_encontradas} imágenes encontradas en total — mostrando {len(imagenes_filtradas)} "
+            f"con al menos {tamano_minimo}px. Descárgalas y pégalas manualmente donde correspondan en el editor."
         )
         IMAGENES_POR_FILA = 4
-        for inicio in range(0, len(st.session_state.banco_imagenes), IMAGENES_POR_FILA):
-            fila = st.session_state.banco_imagenes[inicio:inicio + IMAGENES_POR_FILA]
+        for inicio in range(0, len(imagenes_filtradas), IMAGENES_POR_FILA):
+            fila = imagenes_filtradas[inicio:inicio + IMAGENES_POR_FILA]
             columnas = st.columns(IMAGENES_POR_FILA)
             for col, img in zip(columnas, fila):
                 idx = st.session_state.banco_imagenes.index(img)
                 with col:
-                    st.image(img["bytes"], caption=f"Diapositiva {img['diapositiva']}", use_container_width=True)
+                    st.image(img["bytes"], caption=f"Diapositiva {img['diapositiva']} ({img['ancho']}x{img['alto']})", use_container_width=True)
                     st.download_button(
                         "⬇️",
                         data=img["bytes"],
@@ -542,7 +568,6 @@ Responde ÚNICAMENTE con el apunte final completo, listo para pegar en un editor
                         key=f"descargar_img_{idx}",
                         use_container_width=True,
                     )
-                st.markdown("---")
 
 # ------------------------------------------
 # PESTAÑA 2: FÁBRICA DE ANKI
