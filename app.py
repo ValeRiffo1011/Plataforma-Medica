@@ -3,6 +3,7 @@ import requests
 import json
 import os
 import io
+import hashlib
 from datetime import datetime
 
 # Librerías para extraer imágenes de PPTX y PDF (deben estar en requirements.txt)
@@ -41,26 +42,75 @@ def guardar_apuntes_en_disco(lista):
         json.dump(lista, f, ensure_ascii=False, indent=2)
 
 
+def normalizar_imagen(image_bytes):
+    """Abre los bytes de una imagen con PIL, corrige el espacio de color si viene
+    en CMYK (causa típica de imágenes que se ven negras/invertidas), y la
+    re-codifica siempre como PNG. Devuelve None si la imagen no es válida o es
+    un formato vectorial (EMF/WMF) que no se puede mostrar como foto."""
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+        if img.mode == "CMYK":
+            # Los JPEG CMYK (típicos de PDFs de imprenta) suelen venir invertidos.
+            img = Image.eval(img, lambda x: 255 - x)
+            img = img.convert("RGB")
+        elif img.mode not in ("RGB", "RGBA", "L"):
+            img = img.convert("RGB")
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        return buffer.getvalue(), img.size
+    except Exception:
+        return None, None
+
+
 def extraer_imagenes_pptx(archivo_subido):
     """Extrae las imágenes de un archivo .pptx, devolviendo una lista de
-    diccionarios {numero_diapositiva, bytes_imagen}."""
+    diccionarios {numero_diapositiva, bytes_imagen}. Descarta duplicados
+    (logos/fondos repetidos en cada diapositiva), formatos vectoriales
+    (EMF/WMF) e imágenes muy pequeñas (iconos decorativos)."""
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+
     imagenes = []
+    hashes_vistos = set()
     prs = Presentation(archivo_subido)
-    for i, slide in enumerate(prs.slides, start=1):
-        for shape in slide.shapes:
-            if shape.shape_type == 13 or (hasattr(shape, "image")):
-                try:
-                    image_bytes = shape.image.blob
-                    imagenes.append({"diapositiva": i, "bytes": image_bytes})
-                except Exception:
+
+    def procesar_shapes(shapes, numero_diapositiva):
+        for shape in shapes:
+            try:
+                if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                    procesar_shapes(shape.shapes, numero_diapositiva)
                     continue
+                if not hasattr(shape, "image"):
+                    continue
+                image = shape.image
+                if image.content_type not in ("image/png", "image/jpeg", "image/jpg", "image/gif", "image/bmp", "image/tiff"):
+                    continue  # formatos vectoriales (EMF/WMF) u otros no fotográficos
+                hash_imagen = hashlib.md5(image.blob).hexdigest()
+                if hash_imagen in hashes_vistos:
+                    continue  # ya apareció antes -> logo/fondo repetido
+                png_bytes, tamano = normalizar_imagen(image.blob)
+                if png_bytes is None:
+                    continue
+                if tamano[0] < 150 and tamano[1] < 150:
+                    continue  # ícono/logo decorativo, muy chico para ser un diagrama útil
+                hashes_vistos.add(hash_imagen)
+                imagenes.append({"diapositiva": numero_diapositiva, "bytes": png_bytes})
+            except Exception:
+                continue
+
+    for i, slide in enumerate(prs.slides, start=1):
+        procesar_shapes(slide.shapes, i)
+
     return imagenes
 
 
 def extraer_imagenes_pdf(archivo_subido):
     """Extrae las imágenes embebidas de un archivo .pdf, devolviendo una lista
-    de diccionarios {numero_diapositiva, bytes_imagen}."""
+    de diccionarios {numero_diapositiva, bytes_imagen}. Descarta duplicados,
+    corrige color CMYK y filtra imágenes muy pequeñas."""
     imagenes = []
+    hashes_vistos = set()
     datos_pdf = archivo_subido.read()
     doc = fitz.open(stream=datos_pdf, filetype="pdf")
     for numero_pagina in range(len(doc)):
@@ -69,7 +119,17 @@ def extraer_imagenes_pdf(archivo_subido):
             xref = img_info[0]
             try:
                 base_image = doc.extract_image(xref)
-                imagenes.append({"diapositiva": numero_pagina + 1, "bytes": base_image["image"]})
+                image_bytes = base_image["image"]
+                hash_imagen = hashlib.md5(image_bytes).hexdigest()
+                if hash_imagen in hashes_vistos:
+                    continue
+                png_bytes, tamano = normalizar_imagen(image_bytes)
+                if png_bytes is None:
+                    continue
+                if tamano[0] < 150 and tamano[1] < 150:
+                    continue
+                hashes_vistos.add(hash_imagen)
+                imagenes.append({"diapositiva": numero_pagina + 1, "bytes": png_bytes})
             except Exception:
                 continue
     doc.close()
@@ -422,58 +482,66 @@ Responde ÚNICAMENTE con el apunte final completo, listo para pegar en un editor
                     st.error(f"Ocurrió un error en la conexión: {e}")
         
     st.markdown("---")
-    
-    col_texto, col_imagenes = st.columns([3, 1])
-    with col_texto:
-        texto_final = st.text_area(
-            "Apunte estructurado listo para editar:",
-            height=400,
-            value=st.session_state.apunte_generado,
-            key=f"editor_apunte_{st.session_state.apunte_version}",
-        )
 
-        titulo_apunte = st.text_input(
-            "Nombre para guardar este apunte:",
-            value=(ramo_codigo.strip() if ramo_codigo.strip() else "Apunte sin título")
-        )
+    texto_final = st.text_area(
+        "Apunte estructurado listo para editar:",
+        height=400,
+        value=st.session_state.apunte_generado,
+        key=f"editor_apunte_{st.session_state.apunte_version}",
+    )
 
-        col_btn1, col_btn2, col_btn3 = st.columns(3)
-        if col_btn1.button("💾 Guardar en Mis Apuntes"):
-            if texto_final.strip() == "":
-                st.warning("⚠️ No hay contenido para guardar todavía.")
-            else:
-                nuevo_apunte = {
-                    "titulo": titulo_apunte.strip() or "Apunte sin título",
-                    "contenido": texto_final,
-                    "fecha_guardado": datetime.now().strftime("%d-%m-%Y %H:%M"),
-                }
-                st.session_state.lista_apuntes.append(nuevo_apunte)
-                guardar_apuntes_en_disco(st.session_state.lista_apuntes)
-                st.session_state.apunte_generado = texto_final
-                st.session_state.apunte_version += 1
-                st.success(f"✅ Apunte '{nuevo_apunte['titulo']}' guardado. Aparecerá en la barra lateral.")
-                st.rerun()
-        col_btn2.button("📤 Exportar a PDF")
-        col_btn3.button("📝 Descargar en Word")
+    titulo_apunte = st.text_input(
+        "Nombre para guardar este apunte:",
+        value=(ramo_codigo.strip() if ramo_codigo.strip() else "Apunte sin título")
+    )
 
-        with st.expander("👁️ Vista previa (cómo se vería formateado)", expanded=False):
-            st.markdown(texto_final)
-        
-    with col_imagenes:
-        st.info("🖼️ Banco de Diapositivas")
-        if not st.session_state.banco_imagenes:
-            st.caption("Sube una presentación arriba para ver aquí sus imágenes.")
+    col_btn1, col_btn2, col_btn3 = st.columns(3)
+    if col_btn1.button("💾 Guardar en Mis Apuntes"):
+        if texto_final.strip() == "":
+            st.warning("⚠️ No hay contenido para guardar todavía.")
         else:
-            st.caption(f"{len(st.session_state.banco_imagenes)} imágenes encontradas. Descárgalas y pégalas manualmente donde correspondan en el editor.")
-            for idx, img in enumerate(st.session_state.banco_imagenes):
-                st.image(img["bytes"], caption=f"Diapositiva {img['diapositiva']}", use_container_width=True)
-                st.download_button(
-                    "⬇️ Descargar",
-                    data=img["bytes"],
-                    file_name=f"diapositiva_{img['diapositiva']}_{idx}.png",
-                    mime="image/png",
-                    key=f"descargar_img_{idx}",
-                )
+            nuevo_apunte = {
+                "titulo": titulo_apunte.strip() or "Apunte sin título",
+                "contenido": texto_final,
+                "fecha_guardado": datetime.now().strftime("%d-%m-%Y %H:%M"),
+            }
+            st.session_state.lista_apuntes.append(nuevo_apunte)
+            guardar_apuntes_en_disco(st.session_state.lista_apuntes)
+            st.session_state.apunte_generado = texto_final
+            st.session_state.apunte_version += 1
+            st.success(f"✅ Apunte '{nuevo_apunte['titulo']}' guardado. Aparecerá en la barra lateral.")
+            st.rerun()
+    col_btn2.button("📤 Exportar a PDF")
+    col_btn3.button("📝 Descargar en Word")
+
+    with st.expander("👁️ Vista previa (cómo se vería formateado)", expanded=False):
+        st.markdown(texto_final)
+
+    st.markdown("---")
+    st.subheader("🖼️ Banco de Diapositivas")
+    if not st.session_state.banco_imagenes:
+        st.caption("Sube una presentación arriba para ver aquí sus imágenes.")
+    else:
+        st.caption(
+            f"{len(st.session_state.banco_imagenes)} imágenes encontradas. "
+            "Descárgalas y pégalas manualmente donde correspondan en el editor."
+        )
+        IMAGENES_POR_FILA = 4
+        for inicio in range(0, len(st.session_state.banco_imagenes), IMAGENES_POR_FILA):
+            fila = st.session_state.banco_imagenes[inicio:inicio + IMAGENES_POR_FILA]
+            columnas = st.columns(IMAGENES_POR_FILA)
+            for col, img in zip(columnas, fila):
+                idx = st.session_state.banco_imagenes.index(img)
+                with col:
+                    st.image(img["bytes"], caption=f"Diapositiva {img['diapositiva']}", use_container_width=True)
+                    st.download_button(
+                        "⬇️",
+                        data=img["bytes"],
+                        file_name=f"diapositiva_{img['diapositiva']}_{idx}.png",
+                        mime="image/png",
+                        key=f"descargar_img_{idx}",
+                        use_container_width=True,
+                    )
                 st.markdown("---")
 
 # ------------------------------------------
