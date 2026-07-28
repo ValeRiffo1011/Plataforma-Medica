@@ -267,6 +267,9 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
                 st.rerun()
         col_btn2.button("📤 Exportar a PDF")
         col_btn3.button("📝 Descargar en Word")
+
+        with st.expander("👁️ Vista previa (cómo se vería formateado)", expanded=False):
+            st.markdown(texto_final)
         
     with col_imagenes:
         st.info("🖼️ Banco de Diapositivas")
