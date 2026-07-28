@@ -2,7 +2,21 @@ import streamlit as st
 import requests
 import json
 import os
+import io
 from datetime import datetime
+
+# Librerías para extraer imágenes de PPTX y PDF (deben estar en requirements.txt)
+try:
+    from pptx import Presentation
+    TIENE_PPTX = True
+except ImportError:
+    TIENE_PPTX = False
+
+try:
+    import fitz  # PyMuPDF
+    TIENE_PDF = True
+except ImportError:
+    TIENE_PDF = False
 
 # ==========================================
 # 0. CONFIGURACIÓN DE LA IA Y MEMORIA
@@ -26,6 +40,41 @@ def guardar_apuntes_en_disco(lista):
     with open(ARCHIVO_APUNTES, "w", encoding="utf-8") as f:
         json.dump(lista, f, ensure_ascii=False, indent=2)
 
+
+def extraer_imagenes_pptx(archivo_subido):
+    """Extrae las imágenes de un archivo .pptx, devolviendo una lista de
+    diccionarios {numero_diapositiva, bytes_imagen}."""
+    imagenes = []
+    prs = Presentation(archivo_subido)
+    for i, slide in enumerate(prs.slides, start=1):
+        for shape in slide.shapes:
+            if shape.shape_type == 13 or (hasattr(shape, "image")):
+                try:
+                    image_bytes = shape.image.blob
+                    imagenes.append({"diapositiva": i, "bytes": image_bytes})
+                except Exception:
+                    continue
+    return imagenes
+
+
+def extraer_imagenes_pdf(archivo_subido):
+    """Extrae las imágenes embebidas de un archivo .pdf, devolviendo una lista
+    de diccionarios {numero_diapositiva, bytes_imagen}."""
+    imagenes = []
+    datos_pdf = archivo_subido.read()
+    doc = fitz.open(stream=datos_pdf, filetype="pdf")
+    for numero_pagina in range(len(doc)):
+        pagina = doc[numero_pagina]
+        for img_info in pagina.get_images(full=True):
+            xref = img_info[0]
+            try:
+                base_image = doc.extract_image(xref)
+                imagenes.append({"diapositiva": numero_pagina + 1, "bytes": base_image["image"]})
+            except Exception:
+                continue
+    doc.close()
+    return imagenes
+
 if "apunte_generado" not in st.session_state:
     st.session_state.apunte_generado = "Aquí aparecerá el apunte médico ordenado con viñetas y negritas..."
 
@@ -34,6 +83,12 @@ if "lista_apuntes" not in st.session_state:
 
 if "apunte_version" not in st.session_state:
     st.session_state.apunte_version = 0
+
+if "banco_imagenes" not in st.session_state:
+    st.session_state.banco_imagenes = []
+
+if "archivo_procesado" not in st.session_state:
+    st.session_state.archivo_procesado = None
 
 # ==========================================
 # 1. CONFIGURACIÓN INICIAL DE LA PÁGINA
@@ -90,6 +145,28 @@ with tab_apuntes:
         )
     with col_input2:
         archivo_clase = st.file_uploader("2. Sube la presentación (.pdf, .pptx):", type=["pdf", "pptx"])
+
+        if archivo_clase is not None and st.session_state.archivo_procesado != archivo_clase.name:
+            with st.spinner("🖼️ Extrayendo imágenes de la presentación..."):
+                try:
+                    extension = archivo_clase.name.lower().split(".")[-1]
+                    if extension == "pptx":
+                        if not TIENE_PPTX:
+                            st.error("Falta la librería 'python-pptx'. Agrégala a requirements.txt.")
+                        else:
+                            st.session_state.banco_imagenes = extraer_imagenes_pptx(archivo_clase)
+                    elif extension == "pdf":
+                        if not TIENE_PDF:
+                            st.error("Falta la librería 'PyMuPDF'. Agrégala a requirements.txt.")
+                        else:
+                            st.session_state.banco_imagenes = extraer_imagenes_pdf(archivo_clase)
+                    st.session_state.archivo_procesado = archivo_clase.name
+                    if st.session_state.banco_imagenes:
+                        st.success(f"✅ Se encontraron {len(st.session_state.banco_imagenes)} imágenes.")
+                    else:
+                        st.info("No se encontraron imágenes incrustadas en este archivo.")
+                except Exception as e:
+                    st.error(f"No se pudo procesar el archivo: {e}")
 
     modo_procesamiento = st.radio(
         "3. ¿Cómo quieres procesar este material?",
@@ -384,7 +461,20 @@ Responde ÚNICAMENTE con el apunte final completo, listo para pegar en un editor
         
     with col_imagenes:
         st.info("🖼️ Banco de Diapositivas")
-        st.caption("Próximamente: Las imágenes se recortarán aquí.")
+        if not st.session_state.banco_imagenes:
+            st.caption("Sube una presentación arriba para ver aquí sus imágenes.")
+        else:
+            st.caption(f"{len(st.session_state.banco_imagenes)} imágenes encontradas. Descárgalas y pégalas manualmente donde correspondan en el editor.")
+            for idx, img in enumerate(st.session_state.banco_imagenes):
+                st.image(img["bytes"], caption=f"Diapositiva {img['diapositiva']}", use_container_width=True)
+                st.download_button(
+                    "⬇️ Descargar",
+                    data=img["bytes"],
+                    file_name=f"diapositiva_{img['diapositiva']}_{idx}.png",
+                    mime="image/png",
+                    key=f"descargar_img_{idx}",
+                )
+                st.markdown("---")
 
 # ------------------------------------------
 # PESTAÑA 2: FÁBRICA DE ANKI
