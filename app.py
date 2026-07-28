@@ -32,6 +32,9 @@ if "apunte_generado" not in st.session_state:
 if "lista_apuntes" not in st.session_state:
     st.session_state.lista_apuntes = cargar_apuntes_guardados()
 
+if "apunte_version" not in st.session_state:
+    st.session_state.apunte_version = 0
+
 # ==========================================
 # 1. CONFIGURACIÓN INICIAL DE LA PÁGINA
 # ==========================================
@@ -55,6 +58,7 @@ with st.sidebar:
             indice_real = len(st.session_state.lista_apuntes) - 1 - i
             if st.button(f"📄 {apunte['titulo']}", key=f"abrir_apunte_{indice_real}"):
                 st.session_state.apunte_generado = apunte["contenido"]
+                st.session_state.apunte_version += 1
                 st.rerun()
 
     st.info("Al hacer clic en un apunte, se abrirá en la pantalla principal para que puedas editarlo o descargarlo (PDF/Word).")
@@ -215,6 +219,7 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
 
                         if texto_respuesta:
                             st.session_state.apunte_generado = texto_respuesta
+                            st.session_state.apunte_version += 1
                             st.success(f"✅ Generado con el modelo: {modelo_final}")
                             st.rerun()
                         else:
@@ -232,7 +237,12 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
     
     col_texto, col_imagenes = st.columns([3, 1])
     with col_texto:
-        texto_final = st.text_area("Apunte estructurado listo para editar:", height=400, value=st.session_state.apunte_generado)
+        texto_final = st.text_area(
+            "Apunte estructurado listo para editar:",
+            height=400,
+            value=st.session_state.apunte_generado,
+            key=f"editor_apunte_{st.session_state.apunte_version}",
+        )
 
         titulo_apunte = st.text_input(
             "Nombre para guardar este apunte:",
@@ -252,6 +262,7 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
                 st.session_state.lista_apuntes.append(nuevo_apunte)
                 guardar_apuntes_en_disco(st.session_state.lista_apuntes)
                 st.session_state.apunte_generado = texto_final
+                st.session_state.apunte_version += 1
                 st.success(f"✅ Apunte '{nuevo_apunte['titulo']}' guardado. Aparecerá en la barra lateral.")
                 st.rerun()
         col_btn2.button("📤 Exportar a PDF")
