@@ -84,7 +84,10 @@ with tab_apuntes:
 
     col_input1, col_input2 = st.columns(2)
     with col_input1:
-        texto_crudo = st.text_area("1. Pega aquí el texto bruto de tu clase:", height=150)
+        texto_crudo = st.text_area(
+            "1. Pega aquí el material de la clase (transcripción, o transcripción + diapositivas ya fusionadas por NotebookLM u otra IA):",
+            height=150,
+        )
     with col_input2:
         archivo_clase = st.file_uploader("2. Sube la presentación (.pdf, .pptx):", type=["pdf", "pptx"])
         
@@ -101,7 +104,15 @@ with tab_apuntes:
                     encabezado = f"{ramo_codigo or '[Ramo y código]'}\n{profesor_materia or '[Profesor y materia]'} | Clase {fecha_clase or '[fecha]'}"
 
                     prompt = f"""
-Eres un asistente experto en crear apuntes de estudio para estudiantes de medicina, a partir de transcripciones brutas de clases grabadas. Debes seguir ESTRICTAMENTE la plantilla de formato que se describe abajo, replicando la misma estructura, mismos tipos de cajas y mismo estilo que un apunte de referencia ya validado. No inventes datos clínicos que no estén en la transcripción; si algo no aparece, simplemente omite esa sección.
+Eres un asistente experto en crear apuntes de estudio para estudiantes de medicina, a partir de material de clase (transcripciones, y opcionalmente contenido de diapositivas ya fusionado). Debes seguir ESTRICTAMENTE la plantilla de formato que se describe abajo, replicando la misma estructura, mismos tipos de cajas y mismo estilo que un apunte de referencia ya validado.
+
+# REGLA MÁS IMPORTANTE: NO RESUMAS, SOLO REESTRUCTURA
+Tu tarea es REORGANIZAR y dar formato al material fuente, NO condensarlo ni resumirlo. Esto significa:
+- Todo dato clínico, cifra, mecanismo, ejemplo, nombre propio, porcentaje o detalle que aparezca en el material fuente DEBE aparecer también en el apunte final. No omitas información por considerarla "secundaria" o "redundante".
+- Si el material fuente explica un mecanismo en 5 pasos, el apunte debe conservar los 5 pasos, no comprimirlos en 1-2 líneas genéricas.
+- Lo único que puedes quitar son las muletillas, titubeos y repeticiones literales propias del habla oral (como "eh...", "o sea", que decía, que decía", pausas sin contenido). Todo lo demás se mantiene.
+- Si tienes dudas entre incluir un detalle o no, inclúyelo. Es preferible un apunte más largo y completo que uno corto que pierda información.
+- No inventes datos clínicos que no estén en el material fuente; si algo no aparece, simplemente omite esa sección (no la rellenes con contenido genérico).
 
 # ENCABEZADO (usa exactamente este bloque al inicio, en texto plano, sin viñetas)
 {encabezado}
@@ -150,7 +161,7 @@ Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qu
 - No agregues comentarios tuyos fuera de la plantilla (nada de "aquí tienes tu apunte" ni explicaciones del proceso).
 - Responde ÚNICAMENTE con el apunte ya estructurado, listo para pegar en un editor de texto.
 
-# TRANSCRIPCIÓN BRUTA DE LA CLASE (fuente principal de contenido):
+# MATERIAL FUENTE (transcripción de la clase, posiblemente ya fusionada con el contenido de las diapositivas):
 {texto_crudo}
 """
 
