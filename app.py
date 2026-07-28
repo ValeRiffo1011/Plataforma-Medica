@@ -36,7 +36,15 @@ tab_apuntes, tab_anki, tab_tablas = st.tabs(["📝 Apuntes y Diapos", "🎴 Fáb
 # ------------------------------------------
 with tab_apuntes:
     st.subheader("Transformador de Clases a Formato Clínico")
-    
+
+    col_meta1, col_meta2, col_meta3 = st.columns(3)
+    with col_meta1:
+        ramo_codigo = st.text_input("Ramo y código (Ej: Patología General 2026 — MAP302)")
+    with col_meta2:
+        profesor_materia = st.text_input("Profesor y materia (Ej: Dr. Navarro — Anatomía Patológica, UFRO)")
+    with col_meta3:
+        fecha_clase = st.text_input("Fecha de la clase (Ej: 05/06/2025)")
+
     col_input1, col_input2 = st.columns(2)
     with col_input1:
         texto_crudo = st.text_area("1. Pega aquí el texto bruto de tu clase:", height=150)
@@ -53,17 +61,61 @@ with tab_apuntes:
                 try:
                     api_key = st.secrets["GEMINI_API_KEY"]
 
-                    prompt = f"""
-                    Toma la siguiente transcripción bruta de una clase de medicina y transfórmala en un apunte clínico de alto rendimiento.
-                    Debes usar la siguiente estructura estrictamente:
-                    - Títulos principales para los temas.
-                    - Viñetas y sub-viñetas para organizar la información.
-                    - Destaca en negrita los conceptos clave, síntomas cardinales, diagnósticos y tratamientos.
-                    - Elimina los titubeos del profesor y ve directo al grano.
+                    encabezado = f"{ramo_codigo or '[Ramo y código]'}\n{profesor_materia or '[Profesor y materia]'} | Clase {fecha_clase or '[fecha]'}"
 
-                    Texto de la clase:
-                    {texto_crudo}
-                    """
+                    prompt = f"""
+Eres un asistente experto en crear apuntes de estudio para estudiantes de medicina, a partir de transcripciones brutas de clases grabadas. Debes seguir ESTRICTAMENTE la plantilla de formato que se describe abajo, replicando la misma estructura, mismos tipos de cajas y mismo estilo que un apunte de referencia ya validado. No inventes datos clínicos que no estén en la transcripción; si algo no aparece, simplemente omite esa sección.
+
+# ENCABEZADO (usa exactamente este bloque al inicio, en texto plano, sin viñetas)
+{encabezado}
+# [Título del tema principal de la clase, como H1]
+Un párrafo breve (2-3 líneas) que describe qué contiene el documento y cómo está estructurado (ejes temáticos principales de la clase).
+
+# ESTRUCTURA DEL CUERPO
+Divide el contenido en secciones numeradas con headers (## 1. Tema, ## 2. Tema, etc.), siguiendo el orden cronológico real en que el profesor los mencionó en la transcripción. Dentro de cada sección:
+- Usa viñetas y sub-viñetas (con sangría) para organizar la información.
+- Destaca en **negrita** los conceptos clave, definiciones, cifras importantes, síntomas cardinales, diagnósticos y tratamientos.
+- Elimina los titubeos, muletillas y repeticiones del profesor, pero NO elimines información clínica real, incluso si es una anécdota o ejemplo que el profesor dio (va en la caja de "CITA DEL PROFESOR" si es una frase textual relevante, o integrada al texto si es un dato).
+
+# CAJAS ESPECIALES (usa estos formatos EXACTOS cuando corresponda; no las agregues si no hay contenido real que amerite una)
+
+1. Caja de advertencia para conceptos que se prestan a confusión:
+⚠️ **TRAMPA DE EXAMEN / NO CONFUNDIR**
+[Contenido: contraste explícito entre dos conceptos que el alumno podría confundir, en 1-3 líneas]
+
+2. Caja para una cita textual del profesor (solo si el profesor dijo algo memorable, una anécdota o un ejemplo ilustrativo, usando su fraseo real de la transcripción):
+💬 **CITA DEL PROFESOR**
+"[cita textual corta]" — [Nombre del profesor, si se conoce, si no usa 'El profesor'] (breve contexto de qué ilustra la cita).
+
+3. Caja para cuando el profesor menciona una diapositiva/imagen/gráfico/mapa (aunque tú no tengas la imagen todavía, describe lo que el profesor cuenta que se ve, y deja un marcador para que se pueda insertar la imagen real después):
+🔬 **DESCRIPCIÓN DE IMAGEN**
+Tipo: [qué tipo de imagen es: mapa, gráfico de barras, tabla, foto histórica, esquema, etc., y su fuente si se menciona]
+Hallazgos: [qué muestra la imagen, según lo que describe el profesor]
+Significado: [por qué importa este hallazgo para el tema, si el profesor lo explica]
+[IMAGEN PENDIENTE DE INSERTAR — buscar en Banco de Diapositivas]
+
+4. Caja para cuando el profesor da una pista explícita de que algo "va a preguntar en la prueba" o lo enfatiza como importante para evaluación:
+📋 **LO QUE PREGUNTA EL PROFESOR**
+[Contenido resumido de la pista, en 1-3 líneas]
+
+# CIERRE DEL DOCUMENTO
+Al final del apunte, agrega SIEMPRE estas dos secciones:
+
+## Lo que el profesor va a preguntar en la prueba
+Lista numerada (10-15 puntos) con los conceptos que, según todo lo dicho en la clase, más probablemente se evalúen (prioriza lo que el profesor remarcó, repitió, o marcó como "trampa" o "pregunta").
+
+## Tabla resumen final
+Una tabla en formato Markdown con columnas: Concepto clave | Contenido esencial | Prioridad
+Donde Prioridad es uno de: 🔴 Máximo | 🟠 Alto | 🟡 Contextual, según qué tan central fue el tema en la clase.
+
+# FORMATO GENERAL
+- Todo el documento en Markdown (headers con #, ##; negritas con **texto**; viñetas con -).
+- No agregues comentarios tuyos fuera de la plantilla (nada de "aquí tienes tu apunte" ni explicaciones del proceso).
+- Responde ÚNICAMENTE con el apunte ya estructurado, listo para pegar en un editor de texto.
+
+# TRANSCRIPCIÓN BRUTA DE LA CLASE (fuente principal de contenido):
+{texto_crudo}
+"""
 
                     # PASO 1: Pedirle el menú de modelos a Google
                     url_menu = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
