@@ -90,10 +90,25 @@ with tab_apuntes:
         )
     with col_input2:
         archivo_clase = st.file_uploader("2. Sube la presentación (.pdf, .pptx):", type=["pdf", "pptx"])
-        
-    if st.button("✨ Estructurar Apunte", type="primary"):
+
+    modo_procesamiento = st.radio(
+        "3. ¿Cómo quieres procesar este material?",
+        options=["✨ Reestructurado (formato con cajas, negritas y tabla resumen)", "📋 Fiel (sin tocar el texto, tal cual lo pegaste)"],
+        horizontal=True,
+        help="Reestructurado: la IA da formato y organiza, con riesgo mínimo de variabilidad entre corridas. "
+             "Fiel: no se llama a la IA para reescribir, se conserva el texto exactamente como lo pegaste (cero riesgo de pérdida de contenido).",
+    )
+    modo_fiel = modo_procesamiento.startswith("📋")
+
+    if st.button("✨ Estructurar Apunte" if not modo_fiel else "📋 Usar transcripción tal cual", type="primary"):
         if texto_crudo.strip() == "":
             st.warning("⚠️ Por favor, pega el texto de la clase primero.")
+        elif modo_fiel:
+            encabezado_fiel = f"{ramo_codigo or '[Ramo y código]'}\n{profesor_materia or '[Profesor y materia]'} | Clase {fecha_clase or '[fecha]'}"
+            st.session_state.apunte_generado = f"{encabezado_fiel}\n\n{texto_crudo}"
+            st.session_state.apunte_version += 1
+            st.success("✅ Transcripción cargada tal cual, sin reestructurar. El banco de imágenes se agregará en la próxima fase.")
+            st.rerun()
         elif not tiene_llave:
             st.error("⚠️ No se encontró la llave de API en los secretos de Streamlit (Settings > Secrets).")
         else:
